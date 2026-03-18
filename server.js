@@ -152,3 +152,36 @@ app.get('/me', (req, res) => {
 });
 
 app.listen(3000, () => console.log('Server running at http://localhost:3000'));
+
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/?error=google_failed' }),
+  async (req, res) => {
+    try {
+      const user = req.user;
+      const otp = generateOTP();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+      await db.query(
+        'INSERT INTO otp_codes (user_id, otp_code, expires_at) VALUES (?, ?, ?)',
+        [user.id, otp, expiresAt]
+      );
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: 'Your OTP Code',
+        html: `
+          <h2>Hello ${user.name}!</h2>
+          <p>Your OTP code is:</p>
+          <h1 style="letter-spacing:8px; color:#4F46E5">${otp}</h1>
+          <p>This code expires in <strong>5 minutes</strong>.</p>
+        `
+      });
+
+      res.redirect(`${process.env.CLIENT_URL}/otp.html?userId=${user.id}&email=${encodeURIComponent(user.email)}`);
+    } catch (err) {
+      console.error('❌ Callback error:', err.message); // ← shows exact error
+      res.status(500).send(`Error: ${err.message}`);    // ← shows in browser
+    }
+  }
+);
