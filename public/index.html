@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Auth App</title>
+  <style>
+    body { font-family: sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f3f4f6; }
+    .card { background:white; padding:40px; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); text-align:center; }
+    .btn { display:inline-flex; align-items:center; gap:10px; padding:12px 24px; background:#4F46E5; color:white; border:none; border-radius:8px; font-size:16px; cursor:pointer; text-decoration:none; margin-top:20px; }
+    .btn:hover { background:#4338CA; }
+    .error { color:red; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔐 Test Auth App</h2>
+    <p>Login with Google — then verify with OTP sent to your email.</p>
+    <a href="/auth/google" class="btn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20">
+      Login with Google
+    </a>
+    <div id="error" class="error"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error')) document.getElementById('error').textContent = 'Login failed. Try again.';
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Verify OTP</title>
+  <style>
+    body { font-family: sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f3f4f6; }
+    .card { background:white; padding:40px; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); text-align:center; min-width:300px; }
+    input { width:100%; padding:12px; font-size:24px; letter-spacing:12px; text-align:center; border:2px solid #e5e7eb; border-radius:8px; margin:16px 0; box-sizing:border-box; }
+    button { width:100%; padding:12px; background:#4F46E5; color:white; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
+    button:hover { background:#4338CA; }
+    .msg { margin-top:12px; font-weight:bold; }
+    .success { color:green; }
+    .error { color:red; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📧 Check Your Email</h2>
+    <p>We sent a 6-digit OTP to <strong id="emailDisplay"></strong></p>
+    <input type="text" id="otpInput" maxlength="6" placeholder="000000">
+    <button onclick="verifyOTP()">Verify OTP</button>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('userId');
+    const email = params.get('email');
+    document.getElementById('emailDisplay').textContent = email;
+
+    async function verifyOTP() {
+      const otp = document.getElementById('otpInput').value;
+      const msgEl = document.getElementById('msg');
+
+      const res = await fetch('/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, otp })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        msgEl.className = 'msg success';
+        msgEl.textContent = `✅ Welcome, ${data.user.name}! OTP verified.`;
+      } else {
+        msgEl.className = 'msg error';
+        msgEl.textContent = `❌ ${data.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
+
+
