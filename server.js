@@ -2,7 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const nodemailer = require('nodemailer');
+const { BrevoClient } = require('@getbrevo/brevo');
 const db = require('./db');
 require('dotenv').config();
 
@@ -20,11 +20,13 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// ── Brevo Email Setup (v5) ────────────────────────────────
+const brevoClient = new BrevoClient({ apiKey: process.env.BREVO_API_KEY });
+
 // ── Passport Google Strategy ─────────────────────────────
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  // callbackURL: '/auth/google/callback'
   callbackURL: process.env.CALLBACK_URL
 }, async (accessToken, refreshToken, profile, done) => {
   try {
@@ -32,7 +34,6 @@ passport.use(new GoogleStrategy({
     const name = profile.displayName;
     const googleId = profile.id;
 
-    // Check if user exists, if not insert
     const [rows] = await db.query('SELECT * FROM users WHERE google_id = ?', [googleId]);
 
     let user;
@@ -56,15 +57,6 @@ passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
   const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
   done(null, rows[0]);
-});
-
-// ── Nodemailer ────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
 });
 
 // ── Helper: Generate OTP ──────────────────────────────────
@@ -94,24 +86,29 @@ app.get('/auth/google/callback',
         [user.id, otp, expiresAt]
       );
 
-      // Send OTP email
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: user.email,
+      // Send OTP email via Brevo v5
+      const emailResult = await brevoClient.transactionalEmails.sendTransacEmail({
         subject: 'Your OTP Code',
-        html: `
+        htmlContent: `
           <h2>Hello ${user.name}!</h2>
           <p>Your OTP code is:</p>
           <h1 style="letter-spacing:8px; color:#4F46E5">${otp}</h1>
           <p>This code expires in <strong>5 minutes</strong>.</p>
-        `
+        `,
+        sender: {
+          name: 'Test Auth App',
+          email: process.env.BREVO_SENDER_EMAIL
+        },
+        to: [{ email: user.email }]
       });
 
+      console.log('📧 Email sent successfully:', emailResult);
+
       // Redirect to OTP page
-      res.redirect(`/otp.html?userId=${user.id}&email=${encodeURIComponent(user.email)}`);
+      res.redirect(`${process.env.CLIENT_URL}/otp.html?userId=${user.id}&email=${encodeURIComponent(user.email)}`);
     } catch (err) {
-      console.error(err);
-      res.redirect('/?error=otp_send_failed');
+      console.error('❌ Callback error:', err.message);
+      res.status(500).send(`Error: ${err.message}`);
     }
   }
 );
@@ -152,36 +149,3 @@ app.get('/me', (req, res) => {
 });
 
 app.listen(3000, () => console.log('Server running at http://localhost:3000'));
-
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/?error=google_failed' }),
-  async (req, res) => {
-    try {
-      const user = req.user;
-      const otp = generateOTP();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-      await db.query(
-        'INSERT INTO otp_codes (user_id, otp_code, expires_at) VALUES (?, ?, ?)',
-        [user.id, otp, expiresAt]
-      );
-
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: user.email,
-        subject: 'Your OTP Code',
-        html: `
-          <h2>Hello ${user.name}!</h2>
-          <p>Your OTP code is:</p>
-          <h1 style="letter-spacing:8px; color:#4F46E5">${otp}</h1>
-          <p>This code expires in <strong>5 minutes</strong>.</p>
-        `
-      });
-
-      res.redirect(`${process.env.CLIENT_URL}/otp.html?userId=${user.id}&email=${encodeURIComponent(user.email)}`);
-    } catch (err) {
-      console.error('❌ Callback error:', err.message); // ← shows exact error
-      res.status(500).send(`Error: ${err.message}`);    // ← shows in browser
-    }
-  }
-);
